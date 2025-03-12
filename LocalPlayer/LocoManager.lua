@@ -422,7 +422,7 @@ local function handleCharacterAdded(newCharacter)
     hipHeightSlider:SetValue(humanoid.HipHeight, true)
     gravitySlider:SetValue(workspace.Gravity, true)
     stepHeightSlider:SetValue(humanoid.MaxSlopeAngle, true)
-}
+end
 
 -- Connect character added event
 player.CharacterAdded:Connect(handleCharacterAdded)
@@ -450,7 +450,7 @@ function LocoManager:Cleanup()
     end
     
     workspace.Gravity = self.OriginalValues.Gravity
-}
+end
 
 -- Add to _G for other scripts to access
 _G.LocoManager = LocoManager
