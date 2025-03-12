@@ -1101,7 +1101,7 @@ function Playr:RefreshUI()
             self.PlayerDetailWindows[userId] = nil
         end
     end
-}
+end
 
 -- Initialize UI refresh loop
 function Playr:StartRefreshLoop()
@@ -1165,7 +1165,7 @@ function Playr:ConnectEvents()
             self:RefreshPlayerList()
         end
     end)
-}
+end
 
 -- Initialize Playr
 function Playr:Initialize()
