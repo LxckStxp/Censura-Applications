@@ -340,5 +340,6 @@ end
 
 -- Start the console
 CensuraConsole:Initialize()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/LxckStxp/Censura-Applications/main/System/Remote.lua"))()
 
 return CensuraConsole
