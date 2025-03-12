@@ -1,6 +1,11 @@
 --[[
   Simple Remote Command Listener
   Allows control of one account via chat commands from another account
+  
+  Features:
+  - Security check to prevent controlling player from running the script
+  - Command system for remote player control
+  - External script execution capability
 ]]
 
 -- Services
@@ -12,8 +17,14 @@ local RunService = game:GetService("RunService")
 local CONTROLLER_ID = 7886577295
 local PREFIX = "!"
 
--- Variables
+-- Security check - Don't run the script if this is the controlling player
 local LocalPlayer = Players.LocalPlayer
+if LocalPlayer.UserId == CONTROLLER_ID then
+    warn("Remote Command Listener: Script terminated - You are the controlling player")
+    return -- Exit the script immediately
+end
+
+-- Variables
 local isFrozen = false
 local freezeConnection = nil
 
