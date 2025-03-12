@@ -25,7 +25,7 @@ if not _G.PlayrService then
     --return
   
     print("PlayrService not found. loading now..")
-    return loadstring(game:HttpGet("https://raw.githubusercontent.com/LxckStxp/CensuraG-Applications/main/Services/PlayrService.lua"))()
+    return loadstring(game:HttpGet("https://raw.githubusercontent.com/LxckStxp/Censura-Applications/main/Services/PlayrService.lua"))()
 end
 
 -- Initialize Playr UI
