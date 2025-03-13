@@ -1,246 +1,194 @@
--- UI Manager Module
-local UIManager = {}
-local System = _G.AiSystem
-local Config = System.Config
-local Logger = System.Utils.Logger
+-- UIManager.lua (Built with CensuraG for Roblox AI Controller)
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
 
-function UIManager:Initialize(controller)
-    self.Controller = controller
-    self:SetupUI()
-    
-    task.spawn(function()
-        while task.wait(1) do
-            self:UpdateUIStats()
-        end
+-- Load CensuraG (assuming it's already loaded globally via CensuraG.lua)
+local CensuraG = _G.CensuraG
+if not CensuraG then
+    warn("CensuraG not loaded. Please run CensuraG.lua first.")
+    return
+end
+
+local UIManager = {}
+UIManager.__index = UIManager
+
+-- Configuration
+local WEBHOOK_URL = "http://127.0.0.1:5000" -- Adjust if your server runs elsewhere
+local DEFAULT_THEME = "Cyberpunk" -- Matches dashboard's vibrant style
+
+-- Helper function to make HTTP POST requests
+local function postRequest(endpoint, data)
+    local success, response = pcall(function()
+        return HttpService:RequestAsync({
+            Url = WEBHOOK_URL .. endpoint,
+            Method = "POST",
+            Headers = {["Content-Type"] = "application/json"},
+            Body = HttpService:JSONEncode(data)
+        })
     end)
+    if success and response.Success then
+        return HttpService:JSONDecode(response.Body)
+    else
+        CensuraG.Logger:error("HTTP POST failed to " .. endpoint .. ": " .. (response and response.StatusMessage or "Unknown error"))
+        return nil
+    end
+end
+
+-- Helper function to make HTTP GET requests
+local function getRequest(endpoint)
+    local success, response = pcall(function()
+        return HttpService:GetAsync(WEBHOOK_URL .. endpoint)
+    end)
+    if success then
+        return HttpService:JSONDecode(response)
+    else
+        CensuraG.Logger:error("HTTP GET failed to " .. endpoint .. ": " .. tostring(response))
+        return nil
+    end
+end
+
+function UIManager.new()
+    local self = setmetatable({}, UIManager)
     
+    -- Set theme to match dashboard/admin
+    CensuraG.SetTheme(DEFAULT_THEME)
+    
+    -- Create main window
+    self.Window = CensuraG.CreateWindow("AI Controller Manager")
+    if not self.Window then
+        CensuraG.Logger:error("Failed to create UIManager window")
+        return nil
+    end
+    self.Window:SetSize(400, 500) -- Larger to fit all options
+    
+    -- Create grid for list layout
+    self.Grid = CensuraG.Components.grid(self.Window.ContentFrame)
+    if not self.Grid then
+        CensuraG.Logger:error("Failed to create grid for UIManager")
+        return nil
+    end
+    
+    -- Initialize components
+    self:SetupUIComponents()
+    
+    CensuraG.Logger:info("UIManager initialized")
     return self
 end
 
-function UIManager:SetupUI()
-    self.Window = _G.CensuraG.CreateWindow("AI Controller")
-    self.Window.Frame.Position = UDim2.new(0, 100, 0, 100)
-    self.Window:SetSize(350, 400)
+function UIManager:SetupUIComponents()
+    -- Title Label
+    local titleLabel = CensuraG.Components.textlabel(self.Grid.Instance, "AI Controller Settings")
+    titleLabel.Instance.TextSize = 20
+    titleLabel.Instance.TextColor3 = Color3.fromRGB(0, 212, 255) -- Cyan to match dashboard
+    self.Grid:AddComponent(titleLabel)
     
-    -- Scrolling frame setup
-    self.ScrollFrame = Instance.new("ScrollingFrame")
-    self.ScrollFrame.Size = UDim2.new(1, -16, 1, -10)
-    self.ScrollFrame.Position = UDim2.new(0, 8, 0, 5)
-    self.ScrollFrame.BackgroundTransparency = 1
-    self.ScrollFrame.ScrollBarThickness = 6
-    self.ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0) -- Auto-adjusted later
-    self.ScrollFrame.Parent = self.Window.ContentFrame
+    -- Section: Server Actions
+    local actionsLabel = CensuraG.Components.textlabel(self.Grid.Instance, "Server Actions")
+    actionsLabel.Instance.TextColor3 = Color3.fromRGB(255, 107, 129) -- Pink accent
+    self.Grid:AddComponent(actionsLabel)
     
-    self.ListLayout = Instance.new("UIListLayout")
-    self.ListLayout.Padding = UDim.new(0, 8)
-    self.ListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-    self.ListLayout.Parent = self.ScrollFrame
-    
-    local padding = Instance.new("UIPadding")
-    padding.PaddingTop = UDim.new(0, 10)
-    padding.PaddingBottom = UDim.new(0, 10)
-    padding.PaddingLeft = UDim.new(0, 10)
-    padding.PaddingRight = UDim.new(0, 10)
-    padding.Parent = self.ScrollFrame
-    
-    -- UI Sections
-    self:CreateSections()
-    
-    -- Dynamic canvas size
-    self.ListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-        self.ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, self.ListLayout.AbsoluteContentSize.Y + 20)
-    end)
-end
-
-function UIManager:CreateSections()
-    self:CreateMainControls()
-    self:CreateBehaviorControls()
-    self:CreateChatControls()
-    self:CreateSpamControls()
-    self:CreateStatusDisplay()
-end
-
-function UIManager:CreateMainControls()
-    self:CreateSectionHeader("🤖 Main Controls")
-    
-    self.ToggleAI = _G.CensuraG.Methods:CreateSwitch(self.ScrollFrame, "Enable AI", false, function(state)
-        self.Controller:ToggleAIControl(state)
-    end)
-    
-    self.WanderButton = _G.CensuraG.Methods:CreateButton(self.ScrollFrame, "Wander", function()
-        if System.State.IsActive then
-            System.Modules.MovementManager:Wander(self.Controller)
-            self:UpdateStatusLabels("wander", nil)
+    local clearHistoryButton = CensuraG.Components.textbutton(self.Grid.Instance, "Clear History", function()
+        local response = postRequest("/admin/clear_history", {})
+        if response and response.status == "success" then
+            CensuraG.Logger:info("History cleared successfully")
         end
     end)
+    self.Grid:AddComponent(clearHistoryButton)
     
-    self.SayButton = _G.CensuraG.Methods:CreateButton(self.ScrollFrame, "Say", function()
-        if System.State.IsActive then
-            local phrases = {"Hey all!", "What’s up?", "Exploring here!", "Cool place!"}
-            local message = phrases[math.random(1, #phrases)]
-            System.Modules.ChatManager:SendMessage(message)
-            self:UpdateStatusLabels("say", nil, message)
+    local resetStatsButton = CensuraG.Components.textbutton(self.Grid.Instance, "Reset Stats", function()
+        local response = postRequest("/admin/reset_stats", {})
+        if response and response.status == "success" then
+            CensuraG.Logger:info("Stats reset successfully")
         end
     end)
+    self.Grid:AddComponent(resetStatsButton)
     
-    self.EmoteButton = _G.CensuraG.Methods:CreateButton(self.ScrollFrame, "Emote", function()
-        if System.State.IsActive then
-            local emotes = {"wave", "dance", "laugh"}
-            System.Modules.MovementManager:PerformEmote(self.Controller, emotes[math.random(1, #emotes)])
+    -- Section: Configuration
+    local configLabel = CensuraG.Components.textlabel(self.Grid.Instance, "Configuration")
+    configLabel.Instance.TextColor3 = Color3.fromRGB(255, 107, 129)
+    self.Grid:AddComponent(configLabel)
+    
+    -- Rate Limiting Toggle
+    local rateLimitToggle = CensuraG.Components.switch(self.Grid.Instance, "Rate Limiting", true, function(state)
+        local configData = {
+            rate_limit = { enabled = state }
+        }
+        local response = postRequest("/admin/update_config", configData)
+        if response and response.status == "success" then
+            CensuraG.Logger:info("Rate limiting " .. (state and "enabled" or "disabled"))
         end
     end)
+    self.Grid:AddComponent(rateLimitToggle)
     
-    self:CreateSeparator()
+    -- Max Requests Slider
+    local maxRequestsSlider = CensuraG.Components.slider(self.Grid.Instance, "Max Requests/Min", 10, 1000, 60, function(value)
+        local configData = {
+            rate_limit = { max_requests = math.floor(value) }
+        }
+        local response = postRequest("/admin/update_config", configData)
+        if response and response.status == "success" then
+            CensuraG.Logger:info("Max requests set to " .. math.floor(value))
+        end
+    end)
+    self.Grid:AddComponent(maxRequestsSlider)
+    
+    -- Theme Dropdown
+    local themeOptions = {"Military", "Cyberpunk"}
+    local themeDropdown = CensuraG.Components.dropdown(self.Grid.Instance, "Theme", themeOptions, function(selected)
+        CensuraG.SetTheme(selected)
+        CensuraG.Logger:info("Theme changed to " .. selected)
+    end)
+    themeDropdown:SetSelected(DEFAULT_THEME, true) -- Set default without triggering callback
+    self.Grid:AddComponent(themeDropdown)
+    
+    -- Section: Stats Display
+    local statsLabel = CensuraG.Components.textlabel(self.Grid.Instance, "Server Stats")
+    statsLabel.Instance.TextColor3 = Color3.fromRGB(255, 107, 129)
+    self.Grid:AddComponent(statsLabel)
+    
+    self.StatsDisplay = CensuraG.Components.textlabel(self.Grid.Instance, "Requests: 0 | Errors: 0")
+    self.StatsDisplay.Instance.TextSize = 14
+    self.Grid:AddComponent(self.StatsDisplay)
+    
+    -- Refresh Stats Button
+    local refreshStatsButton = CensuraG.Components.textbutton(self.Grid.Instance, "Refresh Stats", function()
+        self:UpdateStats()
+    end)
+    self.Grid:AddComponent(refreshStatsButton)
 end
 
-function UIManager:CreateBehaviorControls()
-    self:CreateSectionHeader("🎮 Behavior")
-    
-    self.IntervalSlider = self:CreateSlider("Decision Interval", 2, 15, Config.DECISION_INTERVAL, function(value)
-        Config.DECISION_INTERVAL = value
-    end)
-    
-    self.RadiusSlider = self:CreateSlider("Detection Radius", 20, 100, Config.DETECTION_RADIUS, function(value)
-        Config.DETECTION_RADIUS = value
-    end)
-    
-    self.InteractionSlider = self:CreateSlider("Interaction Distance", 3, 15, Config.INTERACTION_DISTANCE, function(value)
-        Config.INTERACTION_DISTANCE = value
-    end)
-    
-    self:CreateSeparator()
-end
-
-function UIManager:CreateChatControls()
-    self:CreateSectionHeader("💬 Chat")
-    
-    self.MessageLengthSlider = self:CreateSlider("Max Message Length", 100, 500, Config.MAX_MESSAGE_LENGTH, function(value)
-        Config.MAX_MESSAGE_LENGTH = value
-    end)
-    
-    self.MemorySizeSlider = self:CreateSlider("Chat Memory", 5, 30, Config.CHAT_MEMORY_SIZE, function(value)
-        Config.CHAT_MEMORY_SIZE = value
-        while #System.State.MessageLog > value do table.remove(System.State.MessageLog, 1) end
-    end)
-    
-    self:CreateSeparator()
-end
-
-function UIManager:CreateSpamControls()
-    self:CreateSectionHeader("🛡️ Spam")
-    
-    self.SpamToggle = _G.CensuraG.Methods:CreateSwitch(self.ScrollFrame, "Spam Detection", Config.SPAM_DETECTION.enabled, function(state)
-        Config.SPAM_DETECTION.enabled = state
-    end)
-    
-    self.ThresholdSlider = self:CreateSlider("Message Threshold", 2, 10, Config.SPAM_DETECTION.messageThreshold, function(value)
-        Config.SPAM_DETECTION.messageThreshold = value
-    end)
-    
-    self.IgnoredPlayersLabel = self:CreateLabel("Ignored Players: None")
-    self.ClearIgnoredButton = _G.CensuraG.Methods:CreateButton(self.ScrollFrame, "Clear Ignored", function()
-        System.State.IgnoredPlayers = {}
-        self.IgnoredPlayersLabel.Text = "Ignored Players: None"
-    end)
-    
-    self:CreateSeparator()
-end
-
-function UIManager:CreateStatusDisplay()
-    self:CreateSectionHeader("📊 Status")
-    
-    self.StatusFrame = Instance.new("Frame")
-    self.StatusFrame.Size = UDim2.new(1, -20, 0, 60)
-    self.StatusFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-    self.StatusFrame.BackgroundTransparency = 0.8
-    self.StatusFrame.Parent = self.ScrollFrame
-    
-    local corner = Instance.new("UICorner", self.StatusFrame)
-    corner.CornerRadius = UDim.new(0, 4)
-    
-    self.StatusLabel = self:CreateLabel("Status: Idle", self.StatusFrame, UDim2.new(0, 10, 0, 5))
-    self.ActionLabel = self:CreateLabel("Action: None", self.StatusFrame, UDim2.new(0, 10, 0, 20))
-    self.TargetLabel = self:CreateLabel("Target: None", self.StatusFrame, UDim2.new(0, 10, 0, 35))
-    
-    self.ConversationsLabel = self:CreateLabel("Conversations: None")
-    self.StatsLabel = self:CreateLabel("Messages: 0 | Failed Paths: 0")
-end
-
-function UIManager:CreateSectionHeader(text)
-    local header = Instance.new("TextLabel")
-    header.Size = UDim2.new(1, -20, 0, 25)
-    header.BackgroundTransparency = 1
-    header.Text = text
-    header.TextColor3 = Color3.fromRGB(0, 170, 255)
-    header.Font = Enum.Font.Arcade
-    header.TextSize = 16
-    header.TextXAlignment = Enum.TextXAlignment.Left
-    header.Parent = self.ScrollFrame
-    return header
-end
-
-function UIManager:CreateLabel(text, parent, position)
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1, -20, 0, 20)
-    label.Position = position or UDim2.new(0, 0, 0, 0)
-    label.BackgroundTransparency = 1
-    label.Text = text
-    label.TextColor3 = Color3.fromRGB(255, 255, 255)
-    label.Font = Enum.Font.SourceSans
-    label.TextSize = 14
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.Parent = parent or self.ScrollFrame
-    return label
-end
-
-function UIManager:CreateSlider(name, min, max, default, callback)
-    return _G.CensuraG.Methods:CreateSlider(self.ScrollFrame, name, min, max, default, function(value)
-        callback(value)
-        Logger:info(name .. " set to " .. value)
-    end)
-end
-
-function UIManager:CreateSeparator()
-    local separator = Instance.new("Frame")
-    separator.Size = UDim2.new(1, -20, 0, 1)
-    separator.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
-    separator.BackgroundTransparency = 0.7
-    separator.BorderSizePixel = 0
-    separator.Parent = self.ScrollFrame
-end
-
-function UIManager:UpdateUIStats()
-    local ignored = {}
-    for name, time in pairs(System.State.IgnoredPlayers) do
-        if time > os.time() then table.insert(ignored, name) end
+function UIManager:UpdateStats()
+    local stats = getRequest("/api/stats")
+    if stats then
+        self.StatsDisplay.Instance.Text = string.format(
+            "Requests: %d | Errors: %d | Avg Response: %.2fs",
+            stats.requests or 0,
+            stats.errors or 0,
+            stats.avg_response_time or 0
+        )
+        CensuraG.Logger:info("Stats updated")
     end
-    self.IgnoredPlayersLabel.Text = "Ignored Players: " .. (#ignored > 0 and table.concat(ignored, ", ") or "None")
-    
-    local conversations = {}
-    for name in pairs(System.Modules.ChatManager.ActiveConversations) do
-        table.insert(conversations, name)
-    end
-    self.ConversationsLabel.Text = "Conversations: " .. (#conversations > 0 and table.concat(conversations, ", ") or "None")
-    
-    self.StatsLabel.Text = string.format(
-        "Messages: %d | Failed Paths: %d",
-        #System.State.MessageLog,
-        System.Modules.MovementManager.FailedPathfinds
-    )
-    
-    self.StatusLabel.Text = "Status: " .. (System.State.IsActive and "Active" or "Idle")
-    self.ActionLabel.Text = "Action: " .. (System.State.CurrentAction or "None")
-    self.TargetLabel.Text = "Target: " .. (System.State.CurrentTarget or "None")
 end
 
-function UIManager:UpdateStatusLabels(action, target, message)
-    if action then System.State.CurrentAction = action end
-    if target then System.State.CurrentTarget = target end
-    
-    self:UpdateUIStats()
-    if action then
-        Logger:info("UI Updated: " .. action .. (target and " → " .. target or "") .. (message and " | " .. message or ""))
+function UIManager:Show()
+    if self.Window then
+        self.Window.Frame.Visible = true
+        self:UpdateStats() -- Initial stats update
+        CensuraG.Logger:info("UIManager shown")
     end
+end
+
+function UIManager:Hide()
+    if self.Window then
+        self.Window.Frame.Visible = false
+        CensuraG.Logger:info("UIManager hidden")
+    end
+end
+
+-- Auto-initialize when script runs
+local manager = UIManager.new()
+if manager then
+    manager:Show()
 end
 
 return UIManager
