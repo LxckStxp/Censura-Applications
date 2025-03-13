@@ -13,8 +13,29 @@ local Logger = System.Utils.Logger
 -- Track which messages we've responded to and active conversations
 ChatManager.RespondedMessages = {}
 ChatManager.ActiveConversations = {}
-ChatManager.MaxConcurrentConversations = 1 -- Only talk to one person at a time
-ChatManager.ConversationTimeout = 30 -- Seconds before a conversation is considered inactive
+ChatManager.MaxConcurrentConversations = 2 -- Increased from 1 to 2
+ChatManager.ConversationTimeout = 60 -- Increased from 30 to 60 seconds
+ChatManager.LastMessageTime = 0 -- Track when we last sent a message
+
+-- Variety of fallback responses to avoid repetition
+ChatManager.FallbackResponses = {
+    "I was just thinking about that!",
+    "That's interesting. Tell me more.",
+    "I've been exploring this place. It's pretty cool!",
+    "Yeah, I was wondering about that too.",
+    "Sorry, I was distracted by something. What were you saying?",
+    "I think this game is pretty fun, don't you?",
+    "Have you been here before?",
+    "I'm still figuring things out here.",
+    "Have you seen anything interesting around?",
+    "What do you think about this place?",
+    "I'm enjoying exploring here. How about you?",
+    "I was just checking out the scenery. Pretty nice, right?",
+    "Oh, I see what you mean now.",
+    "That's a good point!",
+    "I've been thinking the same thing.",
+    "Interesting perspective!"
+}
 
 function ChatManager:Initialize(controller)
     self.Controller = controller
@@ -26,6 +47,7 @@ function ChatManager:Initialize(controller)
     spawn(function()
         while wait(10) do -- Check every 10 seconds
             self:CleanupOldConversations()
+            self:CleanupRespondedMessages() -- Clean up old message records
         end
     end)
     
@@ -46,6 +68,29 @@ function ChatManager:CleanupOldConversations()
     for _, player in ipairs(toRemove) do
         self.ActiveConversations[player] = nil
         Logger:info("Ended conversation with " .. player .. " due to inactivity")
+    end
+end
+
+-- Cleanup old responded messages to prevent memory leak
+function ChatManager:CleanupRespondedMessages()
+    local currentTime = os.time()
+    local toRemove = {}
+    
+    -- Find old message IDs (older than 5 minutes)
+    for messageId, _ in pairs(self.RespondedMessages) do
+        local timestamp = tonumber(messageId:match(":(%d+)$"))
+        if timestamp and currentTime - timestamp > 300 then -- 5 minutes
+            table.insert(toRemove, messageId)
+        end
+    end
+    
+    -- Remove old message IDs
+    for _, messageId in ipairs(toRemove) do
+        self.RespondedMessages[messageId] = nil
+    end
+    
+    if #toRemove > 0 then
+        Logger:info("Cleaned up " .. #toRemove .. " old responded messages")
     end
 end
 
@@ -124,63 +169,107 @@ end
 
 -- Improved logic for determining if AI should respond
 function ChatManager:ShouldRespondToChat(message, sender)
+    -- Ensure we don't respond too frequently (at least 1.5 second between messages)
+    local currentTime = os.time()
+    if currentTime - self.LastMessageTime < 1.5 then
+        Logger:info("Not responding to " .. sender .. " - too soon after last message")
+        return false
+    end
+    
     -- Check if we're already in too many conversations
     local activeCount = 0
     for _, lastTime in pairs(self.ActiveConversations) do
         activeCount = activeCount + 1
     end
     
-    -- If we're at max conversations and this isn't an active conversation partner, don't respond
-    if activeCount >= self.MaxConcurrentConversations and not self.ActiveConversations[sender] then
-        local namesMentioned = false
-        
-        -- Exception: Always respond if directly addressed
-        if message:lower():find(localPlayer.Name:lower()) then
-            namesMentioned = true
-        end
-        
-        if not namesMentioned then
-            Logger:info("Not responding to " .. sender .. " - already in " .. activeCount .. " conversations")
-            return false
-        end
-    end
-    
-    -- Always respond if our name is mentioned (already checked above for the exception case)
+    -- Always respond if our name is mentioned
     if message:lower():find(localPlayer.Name:lower()) then
         -- Start or update conversation
-        self.ActiveConversations[sender] = os.time()
+        self.ActiveConversations[sender] = currentTime
+        self.LastMessageTime = currentTime
         return true
     end
     
     -- Respond to active conversation partners
     if self.ActiveConversations[sender] then
         -- Update conversation timestamp
-        self.ActiveConversations[sender] = os.time()
+        self.ActiveConversations[sender] = currentTime
+        self.LastMessageTime = currentTime
         return true
+    end
+    
+    -- If we're at max conversations and this isn't an active conversation partner, be more selective
+    if activeCount >= self.MaxConcurrentConversations and not self.ActiveConversations[sender] then
+        -- Only respond if they're very close and it's a question or greeting
+        local senderPlayer = Players:FindFirstChild(sender)
+        if senderPlayer and senderPlayer.Character and senderPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            local distance = (senderPlayer.Character.HumanoidRootPart.Position - self.Controller.RootPart.Position).Magnitude
+            if distance <= Config.DETECTION_RADIUS * 0.3 and self:IsQuestionOrGreeting(message) then
+                -- Start a new conversation if it seems important
+                self.ActiveConversations[sender] = currentTime
+                self.LastMessageTime = currentTime
+                return true
+            end
+        end
+        
+        -- Otherwise don't start a new conversation
+        return false
     end
     
     -- Check if player is nearby
     local senderPlayer = Players:FindFirstChild(sender)
     if senderPlayer and senderPlayer.Character and senderPlayer.Character:FindFirstChild("HumanoidRootPart") then
         local distance = (senderPlayer.Character.HumanoidRootPart.Position - self.Controller.RootPart.Position).Magnitude
-        if distance <= Config.DETECTION_RADIUS * 0.5 then -- Reduced from 0.7 to be more selective
-            -- If player is close and we don't have too many conversations, start a new one
-            if activeCount < self.MaxConcurrentConversations then
-                self.ActiveConversations[sender] = os.time()
+        
+        -- Respond based on distance and message type
+        if distance <= Config.DETECTION_RADIUS * 0.5 then
+            -- If player is close, respond more often
+            if self:IsQuestionOrGreeting(message) or math.random() < 0.6 then
+                self.ActiveConversations[sender] = currentTime
+                self.LastMessageTime = currentTime
                 return true
-            else
-                -- Otherwise only respond occasionally
-                return math.random() < 0.15 -- Reduced chance (15% instead of 30%)
+            end
+        elseif distance <= Config.DETECTION_RADIUS then
+            -- If player is in detection radius but not close, respond less often
+            if self:IsQuestionOrGreeting(message) or math.random() < 0.3 then
+                self.ActiveConversations[sender] = currentTime
+                self.LastMessageTime = currentTime
+                return true
             end
         end
     end
     
-    -- Respond rarely to other messages if not in too many conversations
-    if activeCount < self.MaxConcurrentConversations then
-        return math.random() < 0.1 -- Very low chance (10%)
+    -- Respond occasionally to other messages if not in too many conversations
+    if activeCount < self.MaxConcurrentConversations and math.random() < 0.15 then
+        self.ActiveConversations[sender] = currentTime
+        self.LastMessageTime = currentTime
+        return true
     end
     
     return false -- Don't respond by default
+end
+
+-- Check if a message is likely a question or greeting
+function ChatManager:IsQuestionOrGreeting(message)
+    message = message:lower()
+    
+    -- Check for question marks
+    if message:find("?") then
+        return true
+    end
+    
+    -- Check for common greetings
+    local greetings = {
+        "hi", "hello", "hey", "sup", "yo", "wassup", "what's up", "greetings", "howdy"
+    }
+    
+    for _, greeting in ipairs(greetings) do
+        if message:find(greeting) then
+            return true
+        end
+    end
+    
+    return false
 end
 
 -- Receive and Log Messages
@@ -217,6 +306,11 @@ end
 function ChatManager:SendMessage(message)
     if not message or message == "" then return end
     
+    -- Replace "Oops I zoned out" with more varied responses
+    if message:find("zoned out") or message:find("wasn't paying attention") then
+        message = self.FallbackResponses[math.random(1, #self.FallbackResponses)]
+    end
+    
     local generalChannel = TextChatService.TextChannels and TextChatService.TextChannels.RBXGeneral
     if not generalChannel then
         Logger:warn("RBXGeneral channel not found. Cannot send message: " .. tostring(message))
@@ -250,6 +344,9 @@ function ChatManager:SendMessage(message)
                 end
             end
         end
+        
+        -- Update last message time
+        self.LastMessageTime = os.time()
     end)
 end
 
@@ -295,29 +392,6 @@ function ChatManager:ChunkMessage(message)
     end
     
     return chunks
-end
-
--- Cleanup old responded messages to prevent memory leak
-function ChatManager:CleanupRespondedMessages()
-    local currentTime = os.time()
-    local toRemove = {}
-    
-    -- Find old message IDs (older than 5 minutes)
-    for messageId, _ in pairs(self.RespondedMessages) do
-        local timestamp = tonumber(messageId:match(":(%d+)$"))
-        if timestamp and currentTime - timestamp > 300 then -- 5 minutes
-            table.insert(toRemove, messageId)
-        end
-    end
-    
-    -- Remove old message IDs
-    for _, messageId in ipairs(toRemove) do
-        self.RespondedMessages[messageId] = nil
-    end
-    
-    if #toRemove > 0 then
-        Logger:info("Cleaned up " .. #toRemove .. " old responded messages")
-    end
 end
 
 return ChatManager
