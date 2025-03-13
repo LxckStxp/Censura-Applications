@@ -27,10 +27,34 @@ function UIManager:SetupUI()
     -- Create main window using CensuraG's CreateWindow method
     self.Window = _G.CensuraG.CreateWindow("AI Controller")
     self.Window.Frame.Position = UDim2.new(0, 100, 0, 100)
-    self.Window:SetSize(350, 500) -- Larger window for more controls
+    self.Window:SetSize(350, 400) -- Set a reasonable window size
     
-    -- Create main grid for content
-    self.MainGrid = _G.CensuraG.Methods:CreateGrid(self.Window.ContentFrame)
+    -- Create a scrolling frame to contain all content
+    self.ScrollFrame = Instance.new("ScrollingFrame")
+    self.ScrollFrame.Size = UDim2.new(1, -16, 1, -10) -- Leave space for scrollbar
+    self.ScrollFrame.Position = UDim2.new(0, 8, 0, 5)
+    self.ScrollFrame.BackgroundTransparency = 1
+    self.ScrollFrame.BorderSizePixel = 0
+    self.ScrollFrame.ScrollBarThickness = 6
+    self.ScrollFrame.ScrollBarImageColor3 = _G.CensuraG.Config:GetTheme().AccentColor
+    self.ScrollFrame.ScrollBarImageTransparency = 0.3
+    self.ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 1000) -- Will adjust this dynamically
+    self.ScrollFrame.Parent = self.Window.ContentFrame
+    
+    -- Create a UIListLayout for automatic vertical arrangement
+    self.ListLayout = Instance.new("UIListLayout")
+    self.ListLayout.Padding = UDim.new(0, 8)
+    self.ListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    self.ListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    self.ListLayout.Parent = self.ScrollFrame
+    
+    -- Add padding for better aesthetics
+    local padding = Instance.new("UIPadding")
+    padding.PaddingTop = UDim.new(0, 10)
+    padding.PaddingBottom = UDim.new(0, 10)
+    padding.PaddingLeft = UDim.new(0, 10)
+    padding.PaddingRight = UDim.new(0, 10)
+    padding.Parent = self.ScrollFrame
     
     -- Add category headers and sections
     self:CreateMainControls()
@@ -38,38 +62,39 @@ function UIManager:SetupUI()
     self:CreateChatControls()
     self:CreateSpamControls()
     self:CreateStatusDisplay()
+    
+    -- Update canvas size based on content
+    self.ListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        self.ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, self.ListLayout.AbsoluteContentSize.Y + 20)
+    end)
+    
+    -- Initial canvas size update
+    self.ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, self.ListLayout.AbsoluteContentSize.Y + 20)
 end
 
 -- Main controls section
 function UIManager:CreateMainControls()
     -- Section header
-    local mainHeader = _G.CensuraG.Methods:CreateLabel(self.MainGrid.Instance, "🤖 Main Controls")
-    mainHeader.Instance.Size = UDim2.new(1, -12, 0, 25)
-    mainHeader.Label.TextSize = 16
-    mainHeader.Label.Font = Enum.Font.Arcade -- Match Cyberpunk theme
-    self.MainGrid:AddComponent(mainHeader)
+    local mainHeader = self:CreateSectionHeader("🤖 Main Controls")
     
     -- Main toggle
-    self.ToggleAI = _G.CensuraG.Methods:CreateSwitch(self.MainGrid.Instance, "Enable AI Controller", false, function(state)
+    self.ToggleAI = _G.CensuraG.Methods:CreateSwitch(self.ScrollFrame, "Enable AI Controller", false, function(state)
         self.Controller:ToggleAIControl(state)
     end)
-    self.MainGrid:AddComponent(self.ToggleAI)
     
     -- Manual actions section
-    local actionsHeader = _G.CensuraG.Methods:CreateLabel(self.MainGrid.Instance, "Manual Actions")
-    self.MainGrid:AddComponent(actionsHeader)
+    local actionsHeader = self:CreateLabel("Manual Actions")
     
-    -- Wander button (full width)
-    self.WanderButton = _G.CensuraG.Methods:CreateButton(self.MainGrid.Instance, "Wander", function()
+    -- Wander button
+    self.WanderButton = _G.CensuraG.Methods:CreateButton(self.ScrollFrame, "Wander", function()
         if System.State.IsActive then
             System.Modules.MovementManager:Wander(self.Controller)
             self:UpdateStatusLabels("wander", nil)
         end
     end)
-    self.MainGrid:AddComponent(self.WanderButton)
     
-    -- Say button (full width)
-    self.SayButton = _G.CensuraG.Methods:CreateButton(self.MainGrid.Instance, "Say Something", function()
+    -- Say button
+    self.SayButton = _G.CensuraG.Methods:CreateButton(self.ScrollFrame, "Say Something", function()
         if System.State.IsActive then
             local phrases = {
                 "Hey everyone, what's up?",
@@ -83,101 +108,71 @@ function UIManager:CreateMainControls()
             self:UpdateStatusLabels("say", nil, message)
         end
     end)
-    self.MainGrid:AddComponent(self.SayButton)
     
-    -- Emote button (full width)
-    self.EmoteButton = _G.CensuraG.Methods:CreateButton(self.MainGrid.Instance, "Random Emote", function()
+    -- Emote button
+    self.EmoteButton = _G.CensuraG.Methods:CreateButton(self.ScrollFrame, "Random Emote", function()
         if System.State.IsActive then
             local emotes = {"wave", "dance", "laugh", "point"}
             System.Modules.MovementManager:PerformEmote(self.Controller, emotes[math.random(1, #emotes)])
         end
     end)
-    self.MainGrid:AddComponent(self.EmoteButton)
     
     -- Add separator
-    local separator = Instance.new("Frame")
-    separator.Size = UDim2.new(1, -20, 0, 1)
-    separator.Position = UDim2.new(0, 10, 0, 0)
-    separator.BackgroundColor3 = _G.CensuraG.Config:GetTheme().AccentColor
-    separator.BackgroundTransparency = 0.7
-    separator.BorderSizePixel = 0
-    separator.Parent = self.MainGrid.Instance
-    self.MainGrid:AddComponent({Instance = separator})
+    self:CreateSeparator()
 end
 
 -- Behavior controls section
 function UIManager:CreateBehaviorControls()
     -- Section header
-    local behaviorHeader = _G.CensuraG.Methods:CreateLabel(self.MainGrid.Instance, "🎮 Behavior Settings")
-    behaviorHeader.Instance.Size = UDim2.new(1, -12, 0, 25)
-    behaviorHeader.Label.TextSize = 16
-    behaviorHeader.Label.Font = Enum.Font.Arcade -- Match Cyberpunk theme
-    self.MainGrid:AddComponent(behaviorHeader)
+    local behaviorHeader = self:CreateSectionHeader("🎮 Behavior Settings")
     
     -- Decision interval slider
-    self.IntervalSlider = _G.CensuraG.Methods:CreateSlider(self.MainGrid.Instance, "Decision Interval", 2, 15, Config.DECISION_INTERVAL, function(value)
+    self.IntervalSlider = _G.CensuraG.Methods:CreateSlider(self.ScrollFrame, "Decision Interval", 2, 15, Config.DECISION_INTERVAL, function(value)
         Config.DECISION_INTERVAL = value
         Logger:info("Decision interval set to " .. value)
     end)
-    self.MainGrid:AddComponent(self.IntervalSlider)
     
     -- Detection radius slider
-    self.RadiusSlider = _G.CensuraG.Methods:CreateSlider(self.MainGrid.Instance, "Detection Radius", 20, 100, Config.DETECTION_RADIUS, function(value)
+    self.RadiusSlider = _G.CensuraG.Methods:CreateSlider(self.ScrollFrame, "Detection Radius", 20, 100, Config.DETECTION_RADIUS, function(value)
         Config.DETECTION_RADIUS = value
         Logger:info("Detection radius set to " .. value)
     end)
-    self.MainGrid:AddComponent(self.RadiusSlider)
     
     -- Interaction distance slider
-    self.InteractionSlider = _G.CensuraG.Methods:CreateSlider(self.MainGrid.Instance, "Interaction Distance", 3, 15, Config.INTERACTION_DISTANCE, function(value)
+    self.InteractionSlider = _G.CensuraG.Methods:CreateSlider(self.ScrollFrame, "Interaction Distance", 3, 15, Config.INTERACTION_DISTANCE, function(value)
         Config.INTERACTION_DISTANCE = value
         Logger:info("Interaction distance set to " .. value)
     end)
-    self.MainGrid:AddComponent(self.InteractionSlider)
     
     -- Movement randomization slider
-    self.MovementSlider = _G.CensuraG.Methods:CreateSlider(self.MainGrid.Instance, "Movement Randomization", 0, 100, Config.MOVEMENT_RANDOMIZATION * 100, function(value)
+    self.MovementSlider = _G.CensuraG.Methods:CreateSlider(self.ScrollFrame, "Movement Randomization", 0, 100, Config.MOVEMENT_RANDOMIZATION * 100, function(value)
         Config.MOVEMENT_RANDOMIZATION = value / 100
         Logger:info("Movement randomization set to " .. value .. "%")
     end)
-    self.MainGrid:AddComponent(self.MovementSlider)
     
     -- Add separator
-    local separator = Instance.new("Frame")
-    separator.Size = UDim2.new(1, -20, 0, 1)
-    separator.Position = UDim2.new(0, 10, 0, 0)
-    separator.BackgroundColor3 = _G.CensuraG.Config:GetTheme().AccentColor
-    separator.BackgroundTransparency = 0.7
-    separator.BorderSizePixel = 0
-    separator.Parent = self.MainGrid.Instance
-    self.MainGrid:AddComponent({Instance = separator})
+    self:CreateSeparator()
 end
 
 -- Chat controls section
 function UIManager:CreateChatControls()
     -- Section header
-    local chatHeader = _G.CensuraG.Methods:CreateLabel(self.MainGrid.Instance, "💬 Chat Settings")
-    chatHeader.Instance.Size = UDim2.new(1, -12, 0, 25)
-    chatHeader.Label.TextSize = 16
-    chatHeader.Label.Font = Enum.Font.Arcade -- Match Cyberpunk theme
-    self.MainGrid:AddComponent(chatHeader)
+    local chatHeader = self:CreateSectionHeader("💬 Chat Settings")
     
     -- Max message length slider
-    self.MessageLengthSlider = _G.CensuraG.Methods:CreateSlider(self.MainGrid.Instance, "Max Message Length", 100, 500, Config.MAX_MESSAGE_LENGTH, function(value)
+    self.MessageLengthSlider = _G.CensuraG.Methods:CreateSlider(self.ScrollFrame, "Max Message Length", 100, 500, Config.MAX_MESSAGE_LENGTH, function(value)
         Config.MAX_MESSAGE_LENGTH = value
         Logger:info("Max message length set to " .. value)
     end)
-    self.MainGrid:AddComponent(self.MessageLengthSlider)
     
     -- Message delay slider
-    self.MessageDelaySlider = _G.CensuraG.Methods:CreateSlider(self.MainGrid.Instance, "Message Delay", 1, 20, Config.MESSAGE_DELAY * 10, function(value)
+    self.MessageDelaySlider = _G.CensuraG.Methods:CreateSlider(self.ScrollFrame, "Message Delay", 1, 20, Config.MESSAGE_DELAY * 10, function(value)
         Config.MESSAGE_DELAY = value / 10
         Logger:info("Message delay set to " .. Config.MESSAGE_DELAY)
     end)
-    self.MainGrid:AddComponent(self.MessageDelaySlider)
     
     -- Chat memory size slider
-    self.MemorySizeSlider = _G.CensuraG.Methods:CreateSlider(self.MainGrid.Instance, "Chat Memory Size", 5, 30, Config.CHAT_MEMORY_SIZE, function(value)
+    self.MemorySizeSlider = _G.CensuraG.Methods:CreateSlider(self.ScrollFrame, "Chat Memory Size", 5, 30, Config.CHAT_MEMORY_SIZE, function(value)
         Config.CHAT_MEMORY_SIZE = value
         Logger:info("Chat memory size set to " .. value)
         
@@ -186,112 +181,80 @@ function UIManager:CreateChatControls()
             table.remove(System.State.MessageLog, 1)
         end
     end)
-    self.MainGrid:AddComponent(self.MemorySizeSlider)
     
     -- Max concurrent conversations slider
-    self.ConversationsSlider = _G.CensuraG.Methods:CreateSlider(self.MainGrid.Instance, "Max Conversations", 1, 5, System.Modules.ChatManager.MaxConcurrentConversations, function(value)
+    self.ConversationsSlider = _G.CensuraG.Methods:CreateSlider(self.ScrollFrame, "Max Conversations", 1, 5, System.Modules.ChatManager.MaxConcurrentConversations, function(value)
         System.Modules.ChatManager.MaxConcurrentConversations = value
         Logger:info("Max concurrent conversations set to " .. value)
     end)
-    self.MainGrid:AddComponent(self.ConversationsSlider)
     
     -- Conversation timeout slider
-    self.TimeoutSlider = _G.CensuraG.Methods:CreateSlider(self.MainGrid.Instance, "Conversation Timeout", 10, 60, System.Modules.ChatManager.ConversationTimeout, function(value)
+    self.TimeoutSlider = _G.CensuraG.Methods:CreateSlider(self.ScrollFrame, "Conversation Timeout", 10, 60, System.Modules.ChatManager.ConversationTimeout, function(value)
         System.Modules.ChatManager.ConversationTimeout = value
         Logger:info("Conversation timeout set to " .. value .. " seconds")
     end)
-    self.MainGrid:AddComponent(self.TimeoutSlider)
     
     -- Add separator
-    local separator = Instance.new("Frame")
-    separator.Size = UDim2.new(1, -20, 0, 1)
-    separator.Position = UDim2.new(0, 10, 0, 0)
-    separator.BackgroundColor3 = _G.CensuraG.Config:GetTheme().AccentColor
-    separator.BackgroundTransparency = 0.7
-    separator.BorderSizePixel = 0
-    separator.Parent = self.MainGrid.Instance
-    self.MainGrid:AddComponent({Instance = separator})
+    self:CreateSeparator()
 end
 
 -- Spam controls section
 function UIManager:CreateSpamControls()
     -- Section header
-    local spamHeader = _G.CensuraG.Methods:CreateLabel(self.MainGrid.Instance, "🛡️ Spam Protection")
-    spamHeader.Instance.Size = UDim2.new(1, -12, 0, 25)
-    spamHeader.Label.TextSize = 16
-    spamHeader.Label.Font = Enum.Font.Arcade -- Match Cyberpunk theme
-    self.MainGrid:AddComponent(spamHeader)
+    local spamHeader = self:CreateSectionHeader("🛡️ Spam Protection")
     
     -- Enable spam detection
-    self.SpamDetectionToggle = _G.CensuraG.Methods:CreateSwitch(self.MainGrid.Instance, "Enable Spam Detection", Config.SPAM_DETECTION.enabled, function(state)
+    self.SpamDetectionToggle = _G.CensuraG.Methods:CreateSwitch(self.ScrollFrame, "Enable Spam Detection", Config.SPAM_DETECTION.enabled, function(state)
         Config.SPAM_DETECTION.enabled = state
         Logger:info("Spam detection " .. (state and "enabled" or "disabled"))
     end)
-    self.MainGrid:AddComponent(self.SpamDetectionToggle)
     
     -- Message threshold slider
-    self.ThresholdSlider = _G.CensuraG.Methods:CreateSlider(self.MainGrid.Instance, "Message Threshold", 2, 10, Config.SPAM_DETECTION.messageThreshold, function(value)
+    self.ThresholdSlider = _G.CensuraG.Methods:CreateSlider(self.ScrollFrame, "Message Threshold", 2, 10, Config.SPAM_DETECTION.messageThreshold, function(value)
         Config.SPAM_DETECTION.messageThreshold = value
         Logger:info("Spam message threshold set to " .. value)
     end)
-    self.MainGrid:AddComponent(self.ThresholdSlider)
     
     -- Time window slider
-    self.WindowSlider = _G.CensuraG.Methods:CreateSlider(self.MainGrid.Instance, "Time Window (sec)", 1, 15, Config.SPAM_DETECTION.timeWindow, function(value)
+    self.WindowSlider = _G.CensuraG.Methods:CreateSlider(self.ScrollFrame, "Time Window (sec)", 1, 15, Config.SPAM_DETECTION.timeWindow, function(value)
         Config.SPAM_DETECTION.timeWindow = value
         Logger:info("Spam time window set to " .. value .. " seconds")
     end)
-    self.MainGrid:AddComponent(self.WindowSlider)
     
     -- Cooldown time slider
-    self.CooldownSlider = _G.CensuraG.Methods:CreateSlider(self.MainGrid.Instance, "Cooldown Time (sec)", 5, 60, Config.SPAM_DETECTION.cooldownTime, function(value)
+    self.CooldownSlider = _G.CensuraG.Methods:CreateSlider(self.ScrollFrame, "Cooldown Time (sec)", 5, 60, Config.SPAM_DETECTION.cooldownTime, function(value)
         Config.SPAM_DETECTION.cooldownTime = value
         Logger:info("Spam cooldown time set to " .. value .. " seconds")
     end)
-    self.MainGrid:AddComponent(self.CooldownSlider)
     
     -- Ignored players list
-    self.IgnoredPlayersLabel = _G.CensuraG.Methods:CreateLabel(self.MainGrid.Instance, "Currently Ignored Players:")
-    self.MainGrid:AddComponent(self.IgnoredPlayersLabel)
+    local ignoredPlayersLabel = self:CreateLabel("Currently Ignored Players:")
     
-    self.IgnoredPlayersDisplay = _G.CensuraG.Methods:CreateLabel(self.MainGrid.Instance, "None")
-    self.MainGrid:AddComponent(self.IgnoredPlayersDisplay)
+    self.IgnoredPlayersDisplay = self:CreateLabel("None")
     
     -- Clear ignored players button
-    self.ClearIgnoredButton = _G.CensuraG.Methods:CreateButton(self.MainGrid.Instance, "Clear Ignored Players", function()
+    self.ClearIgnoredButton = _G.CensuraG.Methods:CreateButton(self.ScrollFrame, "Clear Ignored Players", function()
         System.State.IgnoredPlayers = {}
         self.IgnoredPlayersDisplay:SetText("None")
         Logger:info("Cleared all ignored players")
     end)
-    self.MainGrid:AddComponent(self.ClearIgnoredButton)
     
     -- Add separator
-    local separator = Instance.new("Frame")
-    separator.Size = UDim2.new(1, -20, 0, 1)
-    separator.Position = UDim2.new(0, 10, 0, 0)
-    separator.BackgroundColor3 = _G.CensuraG.Config:GetTheme().AccentColor
-    separator.BackgroundTransparency = 0.7
-    separator.BorderSizePixel = 0
-    separator.Parent = self.MainGrid.Instance
-    self.MainGrid:AddComponent({Instance = separator})
+    self:CreateSeparator()
 end
 
 -- Status display section
 function UIManager:CreateStatusDisplay()
     -- Section header
-    local statusHeader = _G.CensuraG.Methods:CreateLabel(self.MainGrid.Instance, "📊 Status")
-    statusHeader.Instance.Size = UDim2.new(1, -12, 0, 25)
-    statusHeader.Label.TextSize = 16
-    statusHeader.Label.Font = Enum.Font.Arcade -- Match Cyberpunk theme
-    self.MainGrid:AddComponent(statusHeader)
+    local statusHeader = self:CreateSectionHeader("📊 Status")
     
     -- Create a frame for status indicators
     local statusFrame = Instance.new("Frame")
-    statusFrame.Size = UDim2.new(1, -12, 0, 75)
+    statusFrame.Size = UDim2.new(1, -20, 0, 75)
     statusFrame.BackgroundColor3 = _G.CensuraG.Config:GetTheme().SecondaryColor
     statusFrame.BackgroundTransparency = 0.8
     statusFrame.BorderSizePixel = 0
-    statusFrame.Parent = self.MainGrid.Instance
+    statusFrame.Parent = self.ScrollFrame
     
     -- Add corner radius
     local statusCorner = Instance.new("UICorner")
@@ -339,20 +302,16 @@ function UIManager:CreateStatusDisplay()
     self.TargetLabel.TextXAlignment = Enum.TextXAlignment.Left
     self.TargetLabel.Parent = statusFrame
     
-    self.MainGrid:AddComponent({Instance = statusFrame})
-    
     -- Active conversations display
-    local conversationsLabel = _G.CensuraG.Methods:CreateLabel(self.MainGrid.Instance, "Active Conversations:")
-    self.MainGrid:AddComponent(conversationsLabel)
+    local conversationsLabel = self:CreateLabel("Active Conversations:")
     
-    self.ConversationsDisplay = _G.CensuraG.Methods:CreateLabel(self.MainGrid.Instance, "None")
-    self.MainGrid:AddComponent(self.ConversationsDisplay)
+    self.ConversationsDisplay = self:CreateLabel("None")
     
     -- Message count and pathfinding stats
     local statsFrame = Instance.new("Frame")
-    statsFrame.Size = UDim2.new(1, -12, 0, 30)
+    statsFrame.Size = UDim2.new(1, -20, 0, 30)
     statsFrame.BackgroundTransparency = 1
-    statsFrame.Parent = self.MainGrid.Instance
+    statsFrame.Parent = self.ScrollFrame
     
     -- Create layout for stats
     local statsLayout = Instance.new("UIListLayout")
@@ -382,13 +341,55 @@ function UIManager:CreateStatusDisplay()
     self.PathfindingLabel.TextSize = 14
     self.PathfindingLabel.Parent = statsFrame
     
-    self.MainGrid:AddComponent({Instance = statsFrame})
-    
     -- Version info at the bottom
-    local versionLabel = _G.CensuraG.Methods:CreateLabel(self.MainGrid.Instance, "AI Controller v1.0")
-    versionLabel.Label.TextSize = 12
-    versionLabel.Label.TextColor3 = _G.CensuraG.Config:GetTheme().SecondaryTextColor
-    self.MainGrid:AddComponent(versionLabel)
+    local versionLabel = self:CreateLabel("AI Controller v1.0")
+    versionLabel.TextSize = 12
+    versionLabel.TextColor3 = _G.CensuraG.Config:GetTheme().SecondaryTextColor
+end
+
+-- Helper function to create section headers
+function UIManager:CreateSectionHeader(text)
+    local header = Instance.new("TextLabel")
+    header.Size = UDim2.new(1, -20, 0, 25)
+    header.BackgroundTransparency = 1
+    header.Text = text
+    header.TextColor3 = _G.CensuraG.Config:GetTheme().AccentColor
+    header.Font = Enum.Font.Arcade -- Match Cyberpunk theme
+    header.TextSize = 16
+    header.TextXAlignment = Enum.TextXAlignment.Left
+    header.Parent = self.ScrollFrame
+    return header
+end
+
+-- Helper function to create labels
+function UIManager:CreateLabel(text)
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, -20, 0, 20)
+    label.BackgroundTransparency = 1
+    label.Text = text
+    label.TextColor3 = _G.CensuraG.Config:GetTheme().TextColor
+    label.Font = _G.CensuraG.Config:GetTheme().Font
+    label.TextSize = 14
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = self.ScrollFrame
+    
+    -- Add SetText method to match CensuraG API
+    label.SetText = function(self, newText)
+        self.Text = newText
+    end
+    
+    return label
+end
+
+-- Helper function to create separators
+function UIManager:CreateSeparator()
+    local separator = Instance.new("Frame")
+    separator.Size = UDim2.new(1, -20, 0, 1)
+    separator.BackgroundColor3 = _G.CensuraG.Config:GetTheme().AccentColor
+    separator.BackgroundTransparency = 0.7
+    separator.BorderSizePixel = 0
+    separator.Parent = self.ScrollFrame
+    return separator
 end
 
 -- Update UI statistics periodically
@@ -438,6 +439,9 @@ function UIManager:UpdateUIStats()
     self.StatusLabel.Text = "Status: " .. (System.State.IsActive and "Active" or "Idle")
     self.ActionLabel.Text = "Action: " .. (System.State.CurrentAction or "None")
     self.TargetLabel.Text = "Target: " .. (System.State.CurrentTarget or "None")
+    
+    -- Update canvas size (in case content has changed)
+    self.ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, self.ListLayout.AbsoluteContentSize.Y + 20)
 end
 
 -- Update status labels in the UI
