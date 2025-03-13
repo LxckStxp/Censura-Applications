@@ -1,91 +1,77 @@
--- Enhanced Logger Module
--- /LxckStxp/Censura-Applications/LocalPlayer/AI/Utils/Logger.lua
-
+-- Logger Module
 local Logger = {}
 
--- Log levels
 Logger.Levels = {
-    DEBUG = "DEBUG",
-    INFO = "INFO",
-    WARN = "WARN",
-    ERROR = "ERROR"
+    DEBUG = 1,
+    INFO = 2,
+    WARN = 3,
+    ERROR = 4
 }
 
--- Current log level (can be changed at runtime)
-Logger.CurrentLevel = Logger.Levels.INFO
-
--- Log history
+Logger.Settings = {
+    CurrentLevel = Logger.Levels.INFO,
+    MaxHistory = 100,
+    TimestampFormat = "%H:%M:%S"
+}
 Logger.History = {}
-Logger.MaxHistory = 100
 
--- Log a message with a specific level
 function Logger:log(level, message)
-    if not self:ShouldLog(level) then return end
+    if self.Levels[level] < self.Settings.CurrentLevel then return end
     
-    local timestamp = os.date("%H:%M:%S")
-    local logEntry = "[" .. timestamp .. "] [" .. level .. "] " .. message
+    local timestamp = os.date(self.Settings.TimestampFormat)
+    local entry = string.format("[%s] [%s] %s", timestamp, level, message)
     
-    -- Store in history
-    table.insert(self.History, logEntry)
-    if #self.History > self.MaxHistory then
+    table.insert(self.History, entry)
+    if #self.History > self.Settings.MaxHistory then
         table.remove(self.History, 1)
     end
     
-    -- Print to console
-    print(logEntry)
-    
-    -- If CensuraG logger exists, use it too
+    print(entry)
     if _G.CensuraG and _G.CensuraG.Logger then
-        if level == self.Levels.ERROR then
-            _G.CensuraG.Logger:error(message)
-        elseif level == self.Levels.WARN then
-            _G.CensuraG.Logger:warn(message)
-        else
-            _G.CensuraG.Logger:info(message)
-        end
+        local cgLogger = _G.CensuraG.Logger
+        if level == "ERROR" then cgLogger:error(message)
+        elseif level == "WARN" then cgLogger:warn(message)
+        else cgLogger:info(message) end
     end
 end
 
--- Check if we should log at this level
-function Logger:ShouldLog(level)
-    local levels = {
-        [self.Levels.DEBUG] = 1,
-        [self.Levels.INFO] = 2,
-        [self.Levels.WARN] = 3,
-        [self.Levels.ERROR] = 4
-    }
-    
-    return levels[level] >= levels[self.CurrentLevel]
-end
-
--- Convenience methods for different log levels
 function Logger:debug(message)
-    self:log(self.Levels.DEBUG, message)
+    self:log("DEBUG", message)
 end
 
 function Logger:info(message)
-    self:log(self.Levels.INFO, message)
+    self:log("INFO", message)
 end
 
 function Logger:warn(message)
-    self:log(self.Levels.WARN, message)
+    self:log("WARN", message)
 end
 
 function Logger:error(message)
-    self:log(self.Levels.ERROR, message)
+    self:log("ERROR", message)
 end
 
--- Get recent logs
-function Logger:GetRecentLogs(count)
-    count = count or self.MaxHistory
-    local result = {}
-    local startIdx = math.max(1, #self.History - count + 1)
-    
-    for i = startIdx, #self.History do
-        table.insert(result, self.History[i])
+function Logger:SetLevel(level)
+    if self.Levels[level] then
+        self.Settings.CurrentLevel = self.Levels[level]
+        self:info("Log level set to " .. level)
+    else
+        self:warn("Invalid log level: " .. tostring(level))
     end
-    
-    return result
+end
+
+function Logger:GetRecentLogs(count)
+    count = math.min(count or self.Settings.MaxHistory, #self.History)
+    local logs = {}
+    for i = #self.History - count + 1, #self.History do
+        table.insert(logs, self.History[i])
+    end
+    return logs
+end
+
+function Logger:ClearHistory()
+    self.History = {}
+    self:info("Log history cleared")
 end
 
 return Logger
