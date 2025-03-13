@@ -352,4 +352,13 @@ function UIManager:UpdateStatusLabels(action, target, message)
     self.ActionLabel:SetText("Action: " .. (System.State.CurrentAction or "None"))
     self.TargetLabel:SetText("Target: " .. (System.State.CurrentTarget or "None"))
     
-    -- Log the
+    -- Log the current state
+    if action then
+        local statusText = "AI Status: " .. action
+        if target then statusText = statusText .. " → " .. target end
+        if message then statusText = statusText .. " | " .. message end
+        Logger:info(statusText)
+    end
+end
+
+return UIManager
