@@ -16,7 +16,9 @@ if not _G.AiSystem then
             CurrentTarget = nil,
             ActionStartTime = 0,
             MessageLog = {},
-            IgnoredPlayers = {}
+            IgnoredPlayers = {},
+            CurrentDecision = nil,
+            LastPositions = {}
         },
         Modules = {},
         Utils = {}
@@ -26,22 +28,22 @@ end
 local System = _G.AiSystem
 
 -- Load utilities first
-System.Utils.Logger = require(script.Utils.Logger)
+System.Utils.Logger = loadstring(game:HttpGet("https://raw.githubusercontent.com/LxckStxp/Censura-Applications/main/LocalPlayer/AI/Utils/Logger.lua"))()
 System.Utils.Logger:info("Loading AI Controller System...")
 
 -- Load configuration
-System.Config = require(script.Utils.Config)
+System.Config = loadstring(game:HttpGet("https://raw.githubusercontent.com/LxckStxp/Censura-Applications/main/LocalPlayer/AI/Utils/Config.lua"))()
 
 -- Load modules
-System.Modules.UIManager = require(script.Modules.UIManager)
-System.Modules.MovementManager = require(script.Modules.MovementManager)
-System.Modules.ChatManager = require(script.Modules.ChatManager)
-System.Modules.SpamDetection = require(script.Modules.SpamDetection)
-System.Modules.ContextBuilder = require(script.Modules.ContextBuilder)
-System.Modules.WebhookService = require(script.Modules.WebhookService)
+System.Modules.UIManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/LxckStxp/Censura-Applications/main/LocalPlayer/AI/Modules/UIManager.lua"))()
+System.Modules.MovementManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/LxckStxp/Censura-Applications/main/LocalPlayer/AI/Modules/MovementManager.lua"))()
+System.Modules.ChatManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/LxckStxp/Censura-Applications/main/LocalPlayer/AI/Modules/ChatManager.lua"))()
+System.Modules.SpamDetection = loadstring(game:HttpGet("https://raw.githubusercontent.com/LxckStxp/Censura-Applications/main/LocalPlayer/AI/Modules/SpamDetection.lua"))()
+System.Modules.ContextBuilder = loadstring(game:HttpGet("https://raw.githubusercontent.com/LxckStxp/Censura-Applications/main/LocalPlayer/AI/Modules/ContextBuilder.lua"))()
+System.Modules.WebhookService = loadstring(game:HttpGet("https://raw.githubusercontent.com/LxckStxp/Censura-Applications/main/LocalPlayer/AI/Modules/WebhookService.lua"))()
 
 -- Load main controller
-local AiController = require(script.AiController)
+local AiController = loadstring(game:HttpGet("https://raw.githubusercontent.com/LxckStxp/Censura-Applications/main/LocalPlayer/AI/AiController.lua"))()
 
 -- Return the initialized controller
 return AiController
