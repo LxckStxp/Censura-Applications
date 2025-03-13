@@ -59,30 +59,17 @@ function UIManager:CreateMainControls()
     local actionsHeader = _G.CensuraG.Methods:CreateLabel(self.MainGrid.Instance, "Manual Actions")
     self.MainGrid:AddComponent(actionsHeader)
     
-    -- Create a horizontal button layout
-    local actionButtonsFrame = Instance.new("Frame")
-    actionButtonsFrame.Size = UDim2.new(1, -12, 0, 35)
-    actionButtonsFrame.BackgroundTransparency = 1
-    actionButtonsFrame.Parent = self.MainGrid.Instance
-    
-    -- Create horizontal layout
-    local actionLayout = Instance.new("UIListLayout")
-    actionLayout.FillDirection = Enum.FillDirection.Horizontal
-    actionLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-    actionLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-    actionLayout.Padding = UDim.new(0, 10)
-    actionLayout.Parent = actionButtonsFrame
-    
-    -- Wander button
-    self.WanderButton = _G.CensuraG.Methods:CreateButton(actionButtonsFrame, "Wander", function()
+    -- Wander button (full width)
+    self.WanderButton = _G.CensuraG.Methods:CreateButton(self.MainGrid.Instance, "Wander", function()
         if System.State.IsActive then
             System.Modules.MovementManager:Wander(self.Controller)
             self:UpdateStatusLabels("wander", nil)
         end
     end)
+    self.MainGrid:AddComponent(self.WanderButton)
     
-    -- Say button
-    self.SayButton = _G.CensuraG.Methods:CreateButton(actionButtonsFrame, "Say", function()
+    -- Say button (full width)
+    self.SayButton = _G.CensuraG.Methods:CreateButton(self.MainGrid.Instance, "Say Something", function()
         if System.State.IsActive then
             local phrases = {
                 "Hey everyone, what's up?",
@@ -96,16 +83,16 @@ function UIManager:CreateMainControls()
             self:UpdateStatusLabels("say", nil, message)
         end
     end)
+    self.MainGrid:AddComponent(self.SayButton)
     
-    -- Emote button
-    self.EmoteButton = _G.CensuraG.Methods:CreateButton(actionButtonsFrame, "Emote", function()
+    -- Emote button (full width)
+    self.EmoteButton = _G.CensuraG.Methods:CreateButton(self.MainGrid.Instance, "Random Emote", function()
         if System.State.IsActive then
             local emotes = {"wave", "dance", "laugh", "point"}
             System.Modules.MovementManager:PerformEmote(self.Controller, emotes[math.random(1, #emotes)])
         end
     end)
-    
-    self.MainGrid:AddComponent({Instance = actionButtonsFrame})
+    self.MainGrid:AddComponent(self.EmoteButton)
     
     -- Add separator
     local separator = Instance.new("Frame")
@@ -200,6 +187,20 @@ function UIManager:CreateChatControls()
         end
     end)
     self.MainGrid:AddComponent(self.MemorySizeSlider)
+    
+    -- Max concurrent conversations slider
+    self.ConversationsSlider = _G.CensuraG.Methods:CreateSlider(self.MainGrid.Instance, "Max Conversations", 1, 5, System.Modules.ChatManager.MaxConcurrentConversations, function(value)
+        System.Modules.ChatManager.MaxConcurrentConversations = value
+        Logger:info("Max concurrent conversations set to " .. value)
+    end)
+    self.MainGrid:AddComponent(self.ConversationsSlider)
+    
+    -- Conversation timeout slider
+    self.TimeoutSlider = _G.CensuraG.Methods:CreateSlider(self.MainGrid.Instance, "Conversation Timeout", 10, 60, System.Modules.ChatManager.ConversationTimeout, function(value)
+        System.Modules.ChatManager.ConversationTimeout = value
+        Logger:info("Conversation timeout set to " .. value .. " seconds")
+    end)
+    self.MainGrid:AddComponent(self.TimeoutSlider)
     
     -- Add separator
     local separator = Instance.new("Frame")
@@ -340,6 +341,13 @@ function UIManager:CreateStatusDisplay()
     
     self.MainGrid:AddComponent({Instance = statusFrame})
     
+    -- Active conversations display
+    local conversationsLabel = _G.CensuraG.Methods:CreateLabel(self.MainGrid.Instance, "Active Conversations:")
+    self.MainGrid:AddComponent(conversationsLabel)
+    
+    self.ConversationsDisplay = _G.CensuraG.Methods:CreateLabel(self.MainGrid.Instance, "None")
+    self.MainGrid:AddComponent(self.ConversationsDisplay)
+    
     -- Message count and pathfinding stats
     local statsFrame = Instance.new("Frame")
     statsFrame.Size = UDim2.new(1, -12, 0, 30)
@@ -403,6 +411,21 @@ function UIManager:UpdateUIStats()
         self.IgnoredPlayersDisplay:SetText(table.concat(ignoredNames, ", "))
     else
         self.IgnoredPlayersDisplay:SetText("None")
+    end
+    
+    -- Count active conversations
+    local conversationCount = 0
+    local conversationNames = {}
+    for name, time in pairs(System.Modules.ChatManager.ActiveConversations) do
+        conversationCount = conversationCount + 1
+        table.insert(conversationNames, name)
+    end
+    
+    -- Update active conversations display
+    if conversationCount > 0 then
+        self.ConversationsDisplay:SetText(table.concat(conversationNames, ", "))
+    else
+        self.ConversationsDisplay:SetText("None")
     end
     
     -- Update pathfinding stats
