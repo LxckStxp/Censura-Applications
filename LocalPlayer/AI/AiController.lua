@@ -112,6 +112,50 @@ function AiController:RunAI()
     end
 end
 
+-- Query Grok with Chat Input
+function AiController:QueryGrokWithChat(message, sender)
+    -- Skip if the player is marked as a spammer
+    if System.State.IgnoredPlayers[sender] and System.State.IgnoredPlayers[sender] > os.time() then
+        Logger:info("Ignoring chat from spammer: " .. sender)
+        return
+    end
+    
+    -- Check if we're in too many conversations
+    local shouldRespond = System.Modules.ChatManager:ShouldRespondToChat(message, sender)
+    if not shouldRespond then
+        Logger:info("Decided not to respond to: " .. sender)
+        return
+    end
+    
+    -- Generate a unique ID for this query to prevent duplicates
+    local queryId = sender .. ":" .. message .. ":" .. os.time()
+    
+    -- Check if we've recently responded to a very similar message
+    for id, _ in pairs(System.Modules.ChatManager.RespondedMessages) do
+        -- If the ID contains the same sender and similar message in the last 5 seconds
+        if id:find(sender, 1, true) and id:find(message:sub(1, 10), 1, true) and 
+           os.time() - tonumber(id:match(":(%d+)$") or 0) < 5 then
+            Logger:info("Skipping very similar recent message from " .. sender)
+            return
+        end
+    end
+    
+    local context = System.Modules.ContextBuilder:GetContext() .. "\nNew message from " .. sender .. ": " .. message
+    local decision = System.Modules.WebhookService:CallGrok(context)
+    
+    if decision then
+        -- Mark that we're in conversation with this player
+        System.Modules.ChatManager:StartConversation(sender)
+        
+        System.State.CurrentDecision = decision
+        System.State.ActionStartTime = tick()
+        self:ExecuteDecision(decision)
+    else
+        -- Fallback response
+        System.Modules.ChatManager:SendMessage("Hey " .. sender .. ", what's that about?")
+    end
+end
+
 -- Execute Grok's Decision
 function AiController:ExecuteDecision(decision)
     local action = decision.action
@@ -160,27 +204,6 @@ function AiController:ExecuteDecision(decision)
         end
     else
         Logger:warn("Unknown or invalid action: " .. tostring(action))
-    end
-end
-
--- Query Grok with Chat Input
-function AiController:QueryGrokWithChat(message, sender)
-    -- Skip if the player is marked as a spammer
-    if System.State.IgnoredPlayers[sender] and System.State.IgnoredPlayers[sender] > os.time() then
-        Logger:info("Ignoring chat from spammer: " .. sender)
-        return
-    end
-    
-    local context = System.Modules.ContextBuilder:GetContext() .. "\nNew message from " .. sender .. ": " .. message
-    local decision = System.Modules.WebhookService:CallGrok(context)
-    
-    if decision then
-        System.State.CurrentDecision = decision
-        System.State.ActionStartTime = tick()
-        self:ExecuteDecision(decision)
-    else
-        -- Fallback response
-        System.Modules.ChatManager:SendMessage("Hey " .. sender .. ", what's that about?")
     end
 end
 
