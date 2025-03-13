@@ -69,6 +69,7 @@ function AiController:SetupCharacterHandler()
         -- Reset state on respawn
         System.State.CurrentAction = nil
         System.State.CurrentTarget = nil
+        System.State.LastPositions = {}
         
         -- Notify modules about character change
         System.Modules.MovementManager:OnCharacterChanged(self)
@@ -184,5 +185,6 @@ function AiController:QueryGrokWithChat(message, sender)
 end
 
 -- Create and return the instance
-local controller = AiController:Initialize()
+local controller = setmetatable({}, AiController)
+controller:Initialize()
 return controller
