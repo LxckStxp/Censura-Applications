@@ -235,7 +235,8 @@ function UIManager:CreateSpamControls()
     -- Clear ignored players button
     self.ClearIgnoredButton = _G.CensuraG.Methods:CreateButton(self.ScrollFrame, "Clear Ignored Players", function()
         System.State.IgnoredPlayers = {}
-        self.IgnoredPlayersDisplay:SetText("None")
+        -- Directly update Text property instead of using SetText
+        self.IgnoredPlayersDisplay.Text = "None"
         Logger:info("Cleared all ignored players")
     end)
     
@@ -372,12 +373,6 @@ function UIManager:CreateLabel(text)
     label.TextSize = 14
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.Parent = self.ScrollFrame
-    
-    -- Add SetText method to match CensuraG API
-    label.SetText = function(self, newText)
-        self.Text = newText
-    end
-    
     return label
 end
 
@@ -407,11 +402,11 @@ function UIManager:UpdateUIStats()
         end
     end
     
-    -- Update ignored players display
+    -- Update ignored players display - directly set Text property
     if ignoredCount > 0 then
-        self.IgnoredPlayersDisplay:SetText(table.concat(ignoredNames, ", "))
+        self.IgnoredPlayersDisplay.Text = table.concat(ignoredNames, ", ")
     else
-        self.IgnoredPlayersDisplay:SetText("None")
+        self.IgnoredPlayersDisplay.Text = "None"
     end
     
     -- Count active conversations
@@ -422,11 +417,11 @@ function UIManager:UpdateUIStats()
         table.insert(conversationNames, name)
     end
     
-    -- Update active conversations display
+    -- Update active conversations display - directly set Text property
     if conversationCount > 0 then
-        self.ConversationsDisplay:SetText(table.concat(conversationNames, ", "))
+        self.ConversationsDisplay.Text = table.concat(conversationNames, ", ")
     else
-        self.ConversationsDisplay:SetText("None")
+        self.ConversationsDisplay.Text = "None"
     end
     
     -- Update pathfinding stats
@@ -450,7 +445,7 @@ function UIManager:UpdateStatusLabels(action, target, message)
     if action then System.State.CurrentAction = action end
     if target then System.State.CurrentTarget = target end
     
-    -- Update UI elements
+    -- Update UI elements - directly set Text properties
     self.StatusLabel.Text = "Status: " .. (System.State.IsActive and "Active" or "Idle")
     self.ActionLabel.Text = "Action: " .. (System.State.CurrentAction or "None")
     self.TargetLabel.Text = "Target: " .. (System.State.CurrentTarget or "None")
